@@ -71,9 +71,12 @@ def dashboard(account_id=None):
                 break
 
     campaigns = get_campaigns(selected.get('id', ''))
-    
+
     for c in campaigns:
-        c['ins'] = get_campaign_insights(c.get('id', ''))
+        if c.get('status') == 'ACTIVE':
+            c['ins'] = get_campaign_insights(c.get('id', ''))
+        else:
+            c['ins'] = {}
 
     analysis_raw = get_ai_analysis(selected, campaigns)
 
@@ -271,7 +274,7 @@ def dashboard(account_id=None):
       </div>
       <div class="section">
         <div class="section-title">📊 Account Overview</div>
-        <p style="font-size:13px;color:#666">Campaigns with metrics shown below</p>
+        <p style="font-size:13px;color:#666">Active campaigns show full metrics below</p>
       </div>
     </div>
     <div class="section-title" style="margin-bottom:14px">📋 Campaigns & Metrics</div>
