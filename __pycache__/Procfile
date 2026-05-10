@@ -1,2 +1,1 @@
-web: python brain.py
-
+web: gunicorn brain:app --timeout 120 --workers 2
