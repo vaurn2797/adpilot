@@ -5,8 +5,8 @@ from flask import Flask
 app = Flask(__name__)
 
 import os
-META_ACCESS_TOKEN = os.environ.get("EAATNejjW3ywBRd8ZCxsZBATHKjcWePgXZBCLTM8CwG4yBj3asfYdvso9qKLOua3odQ0IsFgzEjapIOiBXT31cSRVMzlXhMDjC6vo3VZB5VmFyXhMMEzpRFHmAzBvAZALPsxnNyc81un2Kw2nWTJdUFqLbFcNT6PHYfNXzjRG5gD8jHW79ydoK0lM980LzHjv4VZAbcTv3Q7ofANu5EdZAxaALWf4WGiyP8aHZA3z2IXFLB7uF58N9alZAZC1zjI5qz74wc0UioZBAnqkGGrS9DWYhAhWwZDZD")
-GROQ_API_KEY = os.environ.get("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")
+META_ACCESS_TOKEN = os.environ.get("META_TOKEN", "")
+GROQ_API_KEY = os.environ.get("GROQ_KEY", "")
 
 def get_all_accounts():
     url = f"https://graph.facebook.com/v19.0/me/adaccounts?fields=name,account_id,amount_spent&access_token={META_ACCESS_TOKEN}"
