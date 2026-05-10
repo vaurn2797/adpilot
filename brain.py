@@ -21,6 +21,7 @@ def get_campaigns(account_id):
 def get_campaign_insights(campaign_id):
     url = f"https://graph.facebook.com/v21.0/{campaign_id}/insights?fields=spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,landing_page_views,cost_per_landing_page_view&date_preset=last_30d&access_token={META_ACCESS_TOKEN}"
     r = requests.get(url)
+    print(f"Campaign {campaign_id}: {r.json()}")
     data = r.json().get('data', [])
     return data[0] if data else {}
 
