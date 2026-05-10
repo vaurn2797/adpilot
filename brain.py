@@ -14,7 +14,7 @@ def get_all_accounts():
     return r.json().get('data', [])
 
 def get_campaigns(account_id):
-    url = f"https://graph.facebook.com/v19.0/{account_id}/campaigns?fields=name,status,objective,spend_cap&access_token={META_ACCESS_TOKEN}"
+    url = f"https://graph.facebook.com/v21.0/act_{account_id}/campaigns?fields=name,status,objective,daily_budget&access_token={META_ACCESS_TOKEN}"
     r = requests.get(url)
     return r.json().get('data', [])
 
