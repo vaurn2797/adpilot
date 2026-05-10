@@ -9,7 +9,7 @@ META_ACCESS_TOKEN = os.environ.get("META_TOKEN", "")
 GROQ_API_KEY = os.environ.get("GROQ_KEY", "")
 
 def get_all_accounts():
-    url = f"https://graph.facebook.com/v21.0/me/adaccounts?fields=name,account_id,amount_spent&access_token={META_ACCESS_TOKEN}"
+    url = f"https://graph.facebook.com/v21.0/me/adaccounts?fields=name,id,amount_spent&access_token={META_ACCESS_TOKEN}"
     r = requests.get(url)
     return r.json().get('data', [])
 
