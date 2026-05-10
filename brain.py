@@ -14,7 +14,7 @@ def get_all_accounts():
     return r.json().get('data', [])
 
 def get_campaigns(account_id):
-    clean_id = account_id
+    clean_id = str(account_id).replace('act_', '')
     url = f"https://graph.facebook.com/v21.0/act_{clean_id}/campaigns?fields=name,status,objective,daily_budget,insights.date_preset(last_30d){{spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,landing_page_views,cost_per_landing_page_view}}&access_token={META_ACCESS_TOKEN}"
     r = requests.get(url)
     return r.json().get('data', [])
@@ -33,15 +33,6 @@ Be specific with numbers where possible."""
         model="llama-3.3-70b-versatile",
     )
     return chat.choices[0].message.content
-
-def format_number(val, prefix="₹"):
-    try:
-        n = float(val)
-        if prefix == "₹":
-            return f"₹{n:,.0f}"
-        return f"{n:,.2f}"
-    except:
-        return "—"
 
 def get_metric(insights, key):
     if not insights:
@@ -82,11 +73,11 @@ def dashboard(account_id=None):
     selected = accounts[0] if accounts else {}
     if account_id:
         for acc in accounts:
-            if acc['account_id'] == account_id:
+            if acc['id'] == account_id:
                 selected = acc
                 break
 
-    campaigns = get_campaigns(selected.get('account_id', ''))
+    campaigns = get_campaigns(selected.get('id', ''))
     analysis_raw = get_ai_analysis(selected, campaigns)
 
     cards_html = ""
@@ -173,10 +164,10 @@ def dashboard(account_id=None):
     sidebar_html = ""
     for acc in accounts:
         spent = int(acc.get('amount_spent', 0)) // 100
-        is_active = acc['account_id'] == selected.get('account_id')
+        is_active = acc['id'] == selected.get('id')
         active_class = "active" if is_active else ""
         sidebar_html += f"""
-        <a href="/account/{acc['account_id']}" class="acc-item {active_class}">
+        <a href="/account/{acc['id']}" class="acc-item {active_class}">
             <div class="acc-avatar">{acc['name'][0].upper()}</div>
             <div class="acc-info">
                 <div class="acc-item-name">{acc['name']}</div>
@@ -282,7 +273,7 @@ def dashboard(account_id=None):
       </div>
       <div class="section">
         <div class="section-title">📊 Account Overview</div>
-        <p style="font-size:13px;color:#666">Select a campaign below to see detailed metrics</p>
+        <p style="font-size:13px;color:#666">Campaigns with metrics shown below</p>
       </div>
     </div>
     <div class="section-title" style="margin-bottom:14px">📋 Campaigns & Metrics</div>
