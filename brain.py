@@ -1,20 +1,20 @@
+import os
 import requests
 from groq import Groq
 from flask import Flask
 
 app = Flask(__name__)
 
-import os
 META_ACCESS_TOKEN = os.environ.get("META_TOKEN", "")
 GROQ_API_KEY = os.environ.get("GROQ_KEY", "")
 
 def get_all_accounts():
-    url = f"https://graph.facebook.com/v19.0/me/adaccounts?fields=name,account_id,amount_spent&access_token={META_ACCESS_TOKEN}"
+    url = f"https://graph.facebook.com/v21.0/me/adaccounts?fields=name,account_id,amount_spent&access_token={META_ACCESS_TOKEN}"
     r = requests.get(url)
     return r.json().get('data', [])
 
 def get_campaigns(account_id):
-    url = f"https://graph.facebook.com/v21.0/act_{account_id}/campaigns?fields=name,status,objective,daily_budget&access_token={META_ACCESS_TOKEN}"
+    url = f"https://graph.facebook.com/v21.0/act_{account_id}/campaigns?fields=name,status,objective,daily_budget,insights{{spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,landing_page_views,cost_per_landing_page_view}}&access_token={META_ACCESS_TOKEN}"
     r = requests.get(url)
     return r.json().get('data', [])
 
@@ -23,11 +23,56 @@ def get_ai_analysis(account, campaigns):
     chat = client.chat.completions.create(
         messages=[{
             "role": "user",
-            "content": f"Meta Ads Account: {account}. Campaigns: {campaigns}. Give exactly 3 recommendations. Format: TITLE: title | PROBLEM: one line | FIX: one line"
+            "content": f"""You are an expert Meta Ads analyst. Analyze this account and campaigns data and give exactly 3 specific recommendations.
+Account: {account}
+Campaigns: {campaigns}
+Format each recommendation as: TITLE: short title | PROBLEM: one line problem | FIX: one line action
+Be specific with numbers where possible."""
         }],
         model="llama-3.3-70b-versatile",
     )
     return chat.choices[0].message.content
+
+def format_number(val, prefix="₹"):
+    try:
+        n = float(val)
+        if prefix == "₹":
+            return f"₹{n:,.0f}"
+        return f"{n:,.2f}"
+    except:
+        return "—"
+
+def get_metric(insights, key):
+    if not insights:
+        return "—"
+    data = insights.get('data', [{}])
+    if not data:
+        return "—"
+    return data[0].get(key, "—")
+
+def get_action(insights, action_type):
+    if not insights:
+        return "—"
+    data = insights.get('data', [{}])
+    if not data:
+        return "—"
+    actions = data[0].get('actions', [])
+    for a in actions:
+        if a.get('action_type') == action_type:
+            return a.get('value', "—")
+    return "—"
+
+def get_cost_per_action(insights, action_type):
+    if not insights:
+        return "—"
+    data = insights.get('data', [{}])
+    if not data:
+        return "—"
+    costs = data[0].get('cost_per_action_type', [])
+    for a in costs:
+        if a.get('action_type') == action_type:
+            return f"₹{float(a.get('value', 0)):,.2f}"
+    return "—"
 
 @app.route('/')
 @app.route('/account/<account_id>')
@@ -67,16 +112,62 @@ def dashboard(account_id=None):
     campaigns_html = ""
     for c in campaigns:
         status = c.get('status', 'UNKNOWN')
-        color = "#06d6a0" if status == "ACTIVE" else "#aaa"
-        campaigns_html += f"""
-        <div class="camp-row">
-            <div class="camp-dot" style="background:{color}"></div>
-            <div class="camp-name">{c.get('name','Unknown')}</div>
-            <div class="camp-status" style="color:{color}">{status}</div>
-        </div>"""
+        status_color = "#06d6a0" if status == "ACTIVE" else "#aaa"
+        insights = c.get('insights', {})
+        spend = get_metric(insights, 'spend')
+        impressions = get_metric(insights, 'impressions')
+        clicks = get_metric(insights, 'clicks')
+        ctr = get_metric(insights, 'ctr')
+        cpc = get_metric(insights, 'cpc')
+        cpm = get_metric(insights, 'cpm')
+        reach = get_metric(insights, 'reach')
+        frequency = get_metric(insights, 'frequency')
+        atc = get_action(insights, 'add_to_cart')
+        purchases = get_action(insights, 'purchase')
+        checkout = get_action(insights, 'initiate_checkout')
+        lpv = get_metric(insights, 'landing_page_views')
+        cost_atc = get_cost_per_action(insights, 'add_to_cart')
+        cost_lpv = get_metric(insights, 'cost_per_landing_page_view')
 
-    if not campaigns_html:
-        campaigns_html = "<div style='color:#aaa;font-size:13px'>No campaigns found</div>"
+        try:
+            spend_fmt = f"₹{float(spend):,.0f}" if spend != "—" else "—"
+            ctr_fmt = f"{float(ctr):.2f}%" if ctr != "—" else "—"
+            freq_fmt = f"{float(frequency):.2f}" if frequency != "—" else "—"
+            cpc_fmt = f"₹{float(cpc):,.2f}" if cpc != "—" else "—"
+            cpm_fmt = f"₹{float(cpm):,.2f}" if cpm != "—" else "—"
+            lpv_cost_fmt = f"₹{float(cost_lpv):,.2f}" if cost_lpv != "—" else "—"
+        except:
+            spend_fmt = spend
+            ctr_fmt = ctr
+            freq_fmt = frequency
+            cpc_fmt = cpc
+            cpm_fmt = cpm
+            lpv_cost_fmt = cost_lpv
+
+        campaigns_html += f"""
+        <div class="camp-card">
+            <div class="camp-header">
+                <div class="camp-dot" style="background:{status_color}"></div>
+                <div class="camp-name">{c.get('name','Unknown')}</div>
+                <div class="camp-status" style="color:{status_color}">{status}</div>
+            </div>
+            <div class="metrics-grid">
+                <div class="metric"><div class="m-label">Amount Spent</div><div class="m-value">{spend_fmt}</div></div>
+                <div class="metric"><div class="m-label">Impressions</div><div class="m-value">{impressions}</div></div>
+                <div class="metric"><div class="m-label">Reach</div><div class="m-value">{reach}</div></div>
+                <div class="metric"><div class="m-label">Frequency</div><div class="m-value">{freq_fmt}</div></div>
+                <div class="metric"><div class="m-label">Link Clicks</div><div class="m-value">{clicks}</div></div>
+                <div class="metric"><div class="m-label">CTR (All)</div><div class="m-value">{ctr_fmt}</div></div>
+                <div class="metric"><div class="m-label">CPC</div><div class="m-value">{cpc_fmt}</div></div>
+                <div class="metric"><div class="m-label">CPM</div><div class="m-value">{cpm_fmt}</div></div>
+                <div class="metric"><div class="m-label">Landing Page Views</div><div class="m-value">{lpv}</div></div>
+                <div class="metric"><div class="m-label">Cost per LPV</div><div class="m-value">{lpv_cost_fmt}</div></div>
+                <div class="metric"><div class="m-label">Add to Cart</div><div class="m-value">{atc}</div></div>
+                <div class="metric"><div class="m-label">Cost per ATC</div><div class="m-value">{cost_atc}</div></div>
+                <div class="metric"><div class="m-label">Initiate Checkout</div><div class="m-value">{checkout}</div></div>
+                <div class="metric"><div class="m-label">Purchases</div><div class="m-value">{purchases}</div></div>
+            </div>
+        </div>"""
 
     sidebar_html = ""
     for acc in accounts:
@@ -94,6 +185,7 @@ def dashboard(account_id=None):
         </a>"""
 
     selected_spend = int(selected.get('amount_spent', 0)) // 100
+    active_count = sum(1 for c in campaigns if c.get('status') == 'ACTIVE')
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -129,7 +221,7 @@ def dashboard(account_id=None):
   .stat-label {{ font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }}
   .stat-value {{ font-size:24px; font-weight:700; }}
   .stat-sub {{ font-size:11px; color:#aaa; margin-top:4px; }}
-  .two-col {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
+  .two-col {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }}
   .section {{ background:white; border-radius:12px; padding:20px; }}
   .section-title {{ font-size:15px; font-weight:600; margin-bottom:16px; }}
   .rec-card {{ display:flex; gap:12px; padding:12px 0; border-bottom:1px solid #f5f5f5; }}
@@ -139,11 +231,15 @@ def dashboard(account_id=None):
   .rec-title {{ font-size:14px; font-weight:600; margin-bottom:4px; }}
   .rec-problem {{ font-size:12px; color:#e63946; margin-bottom:3px; }}
   .rec-fix {{ font-size:12px; color:#2a9d8f; }}
-  .camp-row {{ display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #f5f5f5; }}
-  .camp-row:last-child {{ border-bottom:none; }}
+  .camp-card {{ background:white; border-radius:12px; padding:18px; margin-bottom:14px; }}
+  .camp-header {{ display:flex; align-items:center; gap:10px; margin-bottom:14px; }}
   .camp-dot {{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }}
-  .camp-name {{ flex:1; font-size:13px; }}
-  .camp-status {{ font-size:11px; font-weight:600; }}
+  .camp-name {{ flex:1; font-size:14px; font-weight:600; }}
+  .camp-status {{ font-size:11px; font-weight:700; }}
+  .metrics-grid {{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }}
+  .metric {{ background:#f8f9fa; border-radius:8px; padding:10px; }}
+  .m-label {{ font-size:10px; color:#888; margin-bottom:4px; text-transform:uppercase; }}
+  .m-value {{ font-size:14px; font-weight:700; color:#1a1a2e; }}
 </style>
 </head>
 <body>
@@ -168,13 +264,13 @@ def dashboard(account_id=None):
         <div class="stat-sub">This account</div>
       </div>
       <div class="stat-card pink">
-        <div class="stat-label">Campaigns</div>
+        <div class="stat-label">Total Campaigns</div>
         <div class="stat-value">{len(campaigns)}</div>
-        <div class="stat-sub">Total campaigns</div>
+        <div class="stat-sub">All campaigns</div>
       </div>
       <div class="stat-card cyan">
         <div class="stat-label">Active Campaigns</div>
-        <div class="stat-value">{sum(1 for c in campaigns if c.get('status')=='ACTIVE')}</div>
+        <div class="stat-value">{active_count}</div>
         <div class="stat-sub">Currently running</div>
       </div>
     </div>
@@ -184,10 +280,12 @@ def dashboard(account_id=None):
         {cards_html}
       </div>
       <div class="section">
-        <div class="section-title">📋 Campaigns</div>
-        {campaigns_html}
+        <div class="section-title">📊 Account Overview</div>
+        <p style="font-size:13px;color:#666">Select a campaign below to see detailed metrics</p>
       </div>
     </div>
+    <div class="section-title" style="margin-bottom:14px">📋 Campaigns & Metrics</div>
+    {campaigns_html}
   </div>
 </div>
 </body>
