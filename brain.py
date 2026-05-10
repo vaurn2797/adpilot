@@ -14,9 +14,15 @@ def get_all_accounts():
     return r.json().get('data', [])
 
 def get_campaigns(account_id):
-    url = f"https://graph.facebook.com/v21.0/{account_id}/campaigns?fields=name,status,objective,daily_budget&access_token={META_ACCESS_TOKEN}"
+    url = f"https://graph.facebook.com/v21.0/{account_id}/campaigns?fields=name,status,objective,daily_budget,id&access_token={META_ACCESS_TOKEN}"
     r = requests.get(url)
     return r.json().get('data', [])
+
+def get_campaign_insights(campaign_id):
+    url = f"https://graph.facebook.com/v21.0/{campaign_id}/insights?fields=spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type,landing_page_views,cost_per_landing_page_view&date_preset=last_30d&access_token={META_ACCESS_TOKEN}"
+    r = requests.get(url)
+    data = r.json().get('data', [])
+    return data[0] if data else {}
 
 def get_ai_analysis(account, campaigns):
     client = Groq(api_key=GROQ_API_KEY)
@@ -33,36 +39,24 @@ Be specific with numbers where possible."""
     )
     return chat.choices[0].message.content
 
-def get_metric(insights, key):
-    if not insights:
-        return "—"
-    data = insights.get('data', [{}])
-    if not data:
-        return "—"
-    return data[0].get(key, "—")
+def get_metric(ins, key):
+    return ins.get(key, "—")
 
-def get_action(insights, action_type):
-    if not insights:
-        return "—"
-    data = insights.get('data', [{}])
-    if not data:
-        return "—"
-    actions = data[0].get('actions', [])
+def get_action(ins, action_type):
+    actions = ins.get('actions', [])
     for a in actions:
         if a.get('action_type') == action_type:
             return a.get('value', "—")
     return "—"
 
-def get_cost_per_action(insights, action_type):
-    if not insights:
-        return "—"
-    data = insights.get('data', [{}])
-    if not data:
-        return "—"
-    costs = data[0].get('cost_per_action_type', [])
+def get_cost_per_action(ins, action_type):
+    costs = ins.get('cost_per_action_type', [])
     for a in costs:
         if a.get('action_type') == action_type:
-            return f"₹{float(a.get('value', 0)):,.2f}"
+            try:
+                return f"₹{float(a.get('value', 0)):,.2f}"
+            except:
+                return "—"
     return "—"
 
 @app.route('/')
@@ -77,6 +71,10 @@ def dashboard(account_id=None):
                 break
 
     campaigns = get_campaigns(selected.get('id', ''))
+    
+    for c in campaigns:
+        c['ins'] = get_campaign_insights(c.get('id', ''))
+
     analysis_raw = get_ai_analysis(selected, campaigns)
 
     cards_html = ""
@@ -104,21 +102,22 @@ def dashboard(account_id=None):
     for c in campaigns:
         status = c.get('status', 'UNKNOWN')
         status_color = "#06d6a0" if status == "ACTIVE" else "#aaa"
-        insights = c.get('insights', {})
-        spend = get_metric(insights, 'spend')
-        impressions = get_metric(insights, 'impressions')
-        clicks = get_metric(insights, 'clicks')
-        ctr = get_metric(insights, 'ctr')
-        cpc = get_metric(insights, 'cpc')
-        cpm = get_metric(insights, 'cpm')
-        reach = get_metric(insights, 'reach')
-        frequency = get_metric(insights, 'frequency')
-        atc = get_action(insights, 'add_to_cart')
-        purchases = get_action(insights, 'purchase')
-        checkout = get_action(insights, 'initiate_checkout')
-        lpv = get_metric(insights, 'landing_page_views')
-        cost_atc = get_cost_per_action(insights, 'add_to_cart')
-        cost_lpv = get_metric(insights, 'cost_per_landing_page_view')
+        ins = c.get('ins', {})
+
+        spend = get_metric(ins, 'spend')
+        impressions = get_metric(ins, 'impressions')
+        clicks = get_metric(ins, 'clicks')
+        ctr = get_metric(ins, 'ctr')
+        cpc = get_metric(ins, 'cpc')
+        cpm = get_metric(ins, 'cpm')
+        reach = get_metric(ins, 'reach')
+        frequency = get_metric(ins, 'frequency')
+        atc = get_action(ins, 'add_to_cart')
+        purchases = get_action(ins, 'purchase')
+        checkout = get_action(ins, 'initiate_checkout')
+        lpv = get_metric(ins, 'landing_page_views')
+        cost_atc = get_cost_per_action(ins, 'add_to_cart')
+        cost_lpv = get_metric(ins, 'cost_per_landing_page_view')
 
         try:
             spend_fmt = f"₹{float(spend):,.0f}" if spend != "—" else "—"
